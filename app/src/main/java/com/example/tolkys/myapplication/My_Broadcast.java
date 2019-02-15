@@ -30,6 +30,7 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Handler;
 import android.os.PowerManager;
+import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.widget.Toast;
@@ -69,6 +70,7 @@ public class My_Broadcast extends BroadcastReceiver {
     Notification mNotification;
     public static final String NOTIFICATION_CHANNEL_ID = "101243";
 
+    @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     public void onReceive(final Context context, Intent intent) {
 
@@ -89,7 +91,7 @@ public class My_Broadcast extends BroadcastReceiver {
         final PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0,
                 intent, PendingIntent.FLAG_CANCEL_CURRENT);
         assert am != null;
-        am.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 5000, pendingIntent);
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 9000, pendingIntent);
 
         setupBleAdvertiser(context);
         startBleAdvertiser(context);

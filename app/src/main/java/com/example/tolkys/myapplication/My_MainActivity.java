@@ -32,18 +32,6 @@ public class My_MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         textView = findViewById(R.id.text);
 
-        ComponentName receiver = new ComponentName(this, My_Broadcast.class);
-
-        PackageManager pm = this.getPackageManager();
-
-        pm.setComponentEnabledSetting(receiver,
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP);
-        am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-        Intent intent = new Intent(this, My_Broadcast.class);
-        pendingIntent = PendingIntent.getBroadcast(this, 0,
-                intent, PendingIntent.FLAG_CANCEL_CURRENT );
-
         scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
 
         refreshText();
@@ -55,6 +43,31 @@ public class My_MainActivity extends AppCompatActivity {
         refreshText();
     }
 
+    public void onClickSchedule(View view){
+        refreshText();
+        ComponentName componentName = new ComponentName(this, My_ExampleJobService.class);
+        JobInfo info = new JobInfo.Builder(123, componentName)
+                .setRequiresCharging(true)
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+                .setPersisted(true)
+                .setPeriodic(15 * 60 * 1000)
+                .build();
+
+        JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
+        int resultCode = scheduler.schedule(info);
+        if (resultCode == JobScheduler.RESULT_SUCCESS) {
+            Log.d(TAG, "Job scheduled");
+        } else {
+            Log.d(TAG, "Job scheduling failed");
+        }
+    }
+    public void onClickCancel(View view){
+        JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
+        scheduler.cancel(JOB_ID);
+        Log.d(TAG, "Job cancelled");
+        refreshText();
+    }
+
     private void refreshText() {
         textView = (TextView) findViewById(R.id.text);
         if (isJobServiceOn(this)){
@@ -62,18 +75,6 @@ public class My_MainActivity extends AppCompatActivity {
         } else {
             textView.setText("Inactive");
         }
-    }
-
-    public void onClickSchedule(View view){
-        restartNotify();
-        refreshText();
-    }
-
-    public void onClickCancel(View view){
-        Log.d(TAG, "Clink cancelled");
-        am.cancel(pendingIntent);
-        scheduler.cancel(JOB_ID);
-        refreshText();
     }
 
     public static boolean isJobServiceOn( Context context ) {
@@ -90,19 +91,5 @@ public class My_MainActivity extends AppCompatActivity {
         }
 
         return hasBeenScheduled ;
-    }
-
-    private void restartNotify() {
-
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTimeInMillis(System.currentTimeMillis());
-        calendar.add(Calendar.SECOND, 10);
-        long time = calendar.getTimeInMillis();
-
-        assert am != null;
-        am.cancel(pendingIntent);
-        am.set(AlarmManager.RTC_WAKEUP, time + 1000, pendingIntent);
-
-        Log.d(TAG, "Starting..");
     }
 }
