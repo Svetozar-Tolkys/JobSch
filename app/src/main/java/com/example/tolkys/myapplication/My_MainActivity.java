@@ -20,20 +20,13 @@ public class My_MainActivity extends AppCompatActivity {
 
     private static final int JOB_ID = 11122;
     private static final String TAG = "my_MainActivity";
-    private JobScheduler scheduler;
     private TextView textView;
-    private AlarmManager am;
-    private PendingIntent pendingIntent;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         textView = findViewById(R.id.text);
-
-        scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
-
         refreshText();
     }
 
@@ -61,6 +54,7 @@ public class My_MainActivity extends AppCompatActivity {
             Log.d(TAG, "Job scheduling failed");
         }
     }
+
     public void onClickCancel(View view){
         JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
         scheduler.cancel(JOB_ID);

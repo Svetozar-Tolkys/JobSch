@@ -57,8 +57,6 @@ public class My_ExampleJobService extends JobService {
     Notification mNotification;
     public static final String NOTIFICATION_CHANNEL_ID = "10124";
 
-    private static long alarmTimer = 60*1000;
-
     @Override
     public boolean onStartJob(JobParameters params) {
         Log.d(TAG, "Started");
@@ -71,26 +69,14 @@ public class My_ExampleJobService extends JobService {
         new Thread(new Runnable() {
             @Override
             public void run() {
-
-                PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-                PowerManager.WakeLock wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                        "MyApp::MyWakelockTag");
-                wakeLock.acquire(alarmTimer);
-
                 startBleAdvertiser(getBaseContext());
-                long timeout = alarmTimer/1000;
-                for(long timer = 0; timer<timeout; timer++) {
-                    if(jobCancelled) {
-                        break;
-                    }
+                while(!jobCancelled) {
                     threadSleep(1000);
-                    Log.d(TAG, "Work " + timer);
+                    Log.d(TAG, "Work ");
                 }
-
                 stopBleAdvertiser();
                 Log.d(TAG, "finished");
                 jobFinished(params, true);
-                wakeLock.release();
             }
         }).start();
     }
