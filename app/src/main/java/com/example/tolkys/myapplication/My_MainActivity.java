@@ -37,13 +37,11 @@ public class My_MainActivity extends AppCompatActivity {
     }
 
     public void onClickSchedule(View view){
-        refreshText();
         ComponentName componentName = new ComponentName(this, My_ExampleJobService.class);
-        JobInfo info = new JobInfo.Builder(123, componentName)
-                .setRequiresCharging(true)
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+        JobInfo info = new JobInfo.Builder(JOB_ID, componentName)
                 .setPersisted(true)
-                .setPeriodic(15 * 60 * 1000)
+                .setMinimumLatency(10)
+                .setOverrideDeadline(100)
                 .build();
 
         JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
@@ -53,6 +51,7 @@ public class My_MainActivity extends AppCompatActivity {
         } else {
             Log.d(TAG, "Job scheduling failed");
         }
+        refreshText();
     }
 
     public void onClickCancel(View view){

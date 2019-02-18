@@ -12,6 +12,7 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothGattServerCallback;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.AdvertiseCallback;
@@ -24,14 +25,10 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Handler;
-import android.os.PowerManager;
-import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
-import java.util.Arrays;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Created by Tolkys on 12/22/2018.
@@ -51,16 +48,21 @@ public class My_ExampleJobService extends JobService {
     private BluetoothLeAdvertiser mBluetoothLeAdvertiser;
     private AdvertiseSettings advertiseSettings;
     private AdvertiseData advertiseData;
-    private UUID SERVICE_UUID = UUID.fromString("02501801-420d-4048-a24e-18e60180e23c");
+
+    private UUID SERVICE_UUID = UUID.fromString("0000152B-0000-1000-8000-00805F9B34FB");
+    private UUID CHARACTERISTIC_COUNTER_UUID = UUID.fromString("0000152A-0000-1000-8000-00805F9B34FB");
+    private UUID DESCRIPTOR_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     NotificationManager nmgr;
     Notification mNotification;
     public static final String NOTIFICATION_CHANNEL_ID = "10124";
 
+    private boolean isJustStarted = true;
+    private long startFlagTimeout = 5000;
+
     @Override
     public boolean onStartJob(JobParameters params) {
         Log.d(TAG, "Started");
-        setupAdvertiser();
         doBackgroundWork(params);
         return true;
     }
@@ -69,6 +71,14 @@ public class My_ExampleJobService extends JobService {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                isJustStarted = true;
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        isJustStarted = false;
+                    }
+                }, startFlagTimeout);
+                setupAdvertiser();
                 startBleAdvertiser(getBaseContext());
                 while(!jobCancelled) {
                     threadSleep(1000);
@@ -88,6 +98,7 @@ public class My_ExampleJobService extends JobService {
         if (mBluetoothGattServer == null) {
             Log.w(TAG, "Unable to create GATT server");
         }
+        mBluetoothGattServer.addService(createService());
     }
 
     private void setupAdvertiser() {
@@ -152,6 +163,20 @@ public class My_ExampleJobService extends JobService {
         return true;
     }
 
+    private BluetoothGattService createService() {
+        BluetoothGattService service = new BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY);
+
+        // Counter characteristic (read-only, supports subscriptions)
+        BluetoothGattCharacteristic direction = new BluetoothGattCharacteristic(CHARACTERISTIC_COUNTER_UUID,
+                BluetoothGattCharacteristic.PROPERTY_READ | BluetoothGattCharacteristic.PROPERTY_NOTIFY, BluetoothGattCharacteristic.PERMISSION_READ);
+        BluetoothGattDescriptor counterConfig = new BluetoothGattDescriptor(DESCRIPTOR_CONFIG_UUID,
+                BluetoothGattDescriptor.PERMISSION_READ | BluetoothGattDescriptor.PERMISSION_WRITE);
+        direction.addDescriptor(counterConfig);
+
+        service.addCharacteristic(direction);
+        return service;
+    }
+
     private AdvertiseCallback mAdvertiseCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
@@ -169,45 +194,63 @@ public class My_ExampleJobService extends JobService {
         public void onConnectionStateChange(BluetoothDevice device, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i(TAG, "BluetoothDevice CONNECTED: " + device);
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
+                if (!isJustStarted) {
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
 
-                        Context application = getApplicationContext();
-                        Bitmap icon = BitmapFactory.decodeResource(application.getResources(),
-                                R.drawable.ic_launcher);
-                        nmgr = (NotificationManager) application.getSystemService(Context.NOTIFICATION_SERVICE);
-                        NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(application)
-                                .setSmallIcon(R.drawable.ic_vpn_key_black_24dp)
-                                .setLargeIcon(icon)
-                                .setContentTitle("Triggered")
-                                .setAutoCancel(true)
-                                .setContentText("Door is open");
+                            Context application = getApplicationContext();
+                            Bitmap icon = BitmapFactory.decodeResource(application.getResources(),
+                                    R.drawable.ic_launcher);
+                            nmgr = (NotificationManager) application.getSystemService(Context.NOTIFICATION_SERVICE);
+                            NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(application)
+                                    .setSmallIcon(R.drawable.ic_vpn_key_black_24dp)
+                                    .setLargeIcon(icon)
+                                    .setContentTitle("Triggered")
+                                    .setAutoCancel(true)
+                                    .setContentText("Door is open");
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            int importance = NotificationManager.IMPORTANCE_HIGH;
-                            NotificationChannel notificationChannel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, "NOTIFICATION_CHANNEL_NAME", importance);
-                            notificationChannel.enableLights(true);
-                            notificationChannel.setLightColor(Color.RED);
-                            notificationChannel.enableVibration(true);
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                int importance = NotificationManager.IMPORTANCE_HIGH;
+                                NotificationChannel notificationChannel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, "NOTIFICATION_CHANNEL_NAME", importance);
+                                notificationChannel.enableLights(true);
+                                notificationChannel.setLightColor(Color.RED);
+                                notificationChannel.enableVibration(true);
+                                assert nmgr != null;
+                                mBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
+                                nmgr.createNotificationChannel(notificationChannel);
+                            }
                             assert nmgr != null;
-                            mBuilder.setChannelId(NOTIFICATION_CHANNEL_ID);
-                            nmgr.createNotificationChannel(notificationChannel);
+
+                            mNotification = mBuilder.build();
+
+                            nmgr.notify(notificationId++, mNotification);
                         }
-                        assert nmgr != null;
-
-                        mNotification = mBuilder.build();
-
-                        nmgr.notify(notificationId++, mNotification);
-                    }
-                });
+                    });
+                }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.i(TAG, "BluetoothDevice DISCONNECTED: " + device);
+                mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
+                mBluetoothLeAdvertiser.startAdvertising(advertiseSettings, advertiseData, mAdvertiseCallback);
             }
         }
 
         @Override
         public void onCharacteristicReadRequest(BluetoothDevice device, int requestId, int offset, BluetoothGattCharacteristic characteristic) {
+            if (CHARACTERISTIC_COUNTER_UUID.equals(characteristic.getUuid())) {
+                int value;
+                if (isJustStarted) {
+                    value = 0;
+                } else {
+                    value = 1;
+                }
+                mBluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, new byte[] {(byte)value});
+                Log.i(TAG, "Read counter: "+value);
+            } else {
+                // Invalid characteristic
+                Log.w(TAG, "Invalid Characteristic Read: " + characteristic.getUuid());
+                mBluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null);
+            }
         }
 
         @Override
