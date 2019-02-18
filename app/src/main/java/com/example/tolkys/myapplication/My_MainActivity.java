@@ -21,6 +21,9 @@ public class My_MainActivity extends AppCompatActivity {
     private static final int JOB_ID = 11122;
     private static final String TAG = "my_MainActivity";
     private TextView textView;
+    ;
+    private AlarmManager am;
+    private PendingIntent pendingIntent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,6 +31,11 @@ public class My_MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         textView = findViewById(R.id.text);
         refreshText();
+
+        am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        Intent intent = new Intent(this, My_Broadcast.class);
+        pendingIntent = PendingIntent.getBroadcast(this, 0,
+                intent, PendingIntent.FLAG_CANCEL_CURRENT );
     }
 
     @Override
@@ -37,7 +45,9 @@ public class My_MainActivity extends AppCompatActivity {
     }
 
     public void onClickSchedule(View view){
-        ComponentName componentName = new ComponentName(this, My_ExampleJobService.class);
+        restartNotify();
+
+/*        ComponentName componentName = new ComponentName(this, My_ExampleJobService.class);
         JobInfo info = new JobInfo.Builder(JOB_ID, componentName)
                 .setPersisted(true)
                 .setMinimumLatency(10)
@@ -50,13 +60,14 @@ public class My_MainActivity extends AppCompatActivity {
             Log.d(TAG, "Job scheduled");
         } else {
             Log.d(TAG, "Job scheduling failed");
-        }
+        }*/
         refreshText();
     }
 
     public void onClickCancel(View view){
-        JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
-        scheduler.cancel(JOB_ID);
+
+        /*        JobScheduler scheduler = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
+        scheduler.cancel(JOB_ID);*/
         Log.d(TAG, "Job cancelled");
         refreshText();
     }
@@ -84,5 +95,19 @@ public class My_MainActivity extends AppCompatActivity {
         }
 
         return hasBeenScheduled ;
+    }
+
+    private void restartNotify() {
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(System.currentTimeMillis());
+        calendar.add(Calendar.SECOND, 10);
+        long time = calendar.getTimeInMillis();
+
+        assert am != null;
+        am.cancel(pendingIntent);
+        am.set(AlarmManager.RTC_WAKEUP, time + 1000, pendingIntent);
+
+        Log.d(TAG, "Starting..");
     }
 }
