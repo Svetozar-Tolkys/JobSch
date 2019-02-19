@@ -21,11 +21,13 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.AdvertiseCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertiseSettings;
+import android.bluetooth.le.AdvertisingSetCallback;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -40,6 +42,11 @@ import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.nio.ByteBuffer;
 import java.util.UUID;
 
 import static android.content.Context.BLUETOOTH_SERVICE;
@@ -58,7 +65,7 @@ public class My_Broadcast extends BroadcastReceiver {
     private JobScheduler scheduler;
     private JobInfo jobInfo;
 
-    private static long alarmTimer = 30*1000;
+    private static long alarmTimer = 1000;
 
     private Handler handler = new Handler();
     private static int notificationId = 0;
@@ -76,7 +83,7 @@ public class My_Broadcast extends BroadcastReceiver {
     private UUID DESCRIPTOR_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     private boolean isJustStarted = true;
-    private long startFlagTimeout = 5000;
+    private boolean isCanceled = false;
 
     NotificationManager nmgr;
     Notification mNotification;
@@ -85,30 +92,46 @@ public class My_Broadcast extends BroadcastReceiver {
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     public void onReceive(final Context context, Intent intent) {
-
+        Log.d(TAG, "Come here!");
         mContext = context;
-
         final AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         final PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0,
                 intent, PendingIntent.FLAG_CANCEL_CURRENT);
         assert am != null;
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 1000, pendingIntent);
-
+        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 1000, pendingIntent);
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                isJustStarted = false;
+                Log.d(TAG, "Triggered");
+            }
+        },1500);
+        stopBleAdvertiser();
         setupBleAdvertiser();
         startBleAdvertiser(context);
         new Thread(new Runnable() {
             @Override
             public void run() {
-
-                threadSleep(alarmTimer);
-                stopBleAdvertiser();
-                assert am != null;
-                am.cancel(pendingIntent);
-                am.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 100, pendingIntent);
-
+                boolean isAlive = true;
+                while (isAlive) {
+                    long inTime = System.currentTimeMillis();
+                    while (System.currentTimeMillis() - inTime < alarmTimer) {
+                    }
+                    if (!loadState() | isCanceled) {
+                        am.cancel(pendingIntent);
+                        stopBleAdvertiser();
+                        Log.d(TAG, "Terminated, auto "+isCanceled);
+                        return;
+                    }
+                    assert am != null;
+                    am.cancel(pendingIntent);
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 1500, pendingIntent);
+                    // Log.d(TAG, "Clear WDT");
+                }
             }
         }).start();
     }
+
     private void startBleAdvertiser(Context context) {
         mBluetoothLeAdvertiser.startAdvertising(advertiseSettings, advertiseData, mAdvertiseCallback);
         // Starts server.
@@ -197,6 +220,7 @@ public class My_Broadcast extends BroadcastReceiver {
         @Override
         public void onStartFailure(int errorCode) {
             Log.w(TAG, "LE Advertise Failed: " + errorCode);
+            isCanceled = true;
         }
     };
 
@@ -242,6 +266,7 @@ public class My_Broadcast extends BroadcastReceiver {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.i(TAG, "BluetoothDevice DISCONNECTED: " + device);
                 mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
+                threadSleep(1000);
                 mBluetoothLeAdvertiser.startAdvertising(advertiseSettings, advertiseData, mAdvertiseCallback);
             }
         }
@@ -273,5 +298,39 @@ public class My_Broadcast extends BroadcastReceiver {
         }
     };
 
+    private boolean loadState() {
+        File directory = new File(mContext.getFilesDir(), "states");
+        if (directory.exists()) {
+            File[] files = directory.listFiles();
+            // Log.i(TAG, "loadState() Size: " + files.length);
+            for (int i = 0; i < files.length; i++) {
+                int size = (int) files[i].length();
+                byte[] bytes = new byte[size];
+                try {
+                    BufferedInputStream buf = new BufferedInputStream(new FileInputStream(files[i]));
+                    buf.read(bytes, 0, size);
+                    buf.close();
+                } catch (Exception e) {
+                    Log.e(TAG, "loadState() read error: " + e.toString());
+                }
+                return (bytes[0] == (byte) 1);
+                // Log.i(TAG, "loadState() Long: " + prevTime);
+            }
+        }
+        return false;
+    }
+
+    public byte[] longToBytes(long x) {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+        buffer.putLong(x);
+        return buffer.array();
+    }
+
+    public long bytesToLong(byte[] bytes) {
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+        buffer.put(bytes);
+        buffer.flip();//need flip
+        return buffer.getLong();
+    }
 
 }
