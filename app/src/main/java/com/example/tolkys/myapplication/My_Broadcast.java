@@ -61,11 +61,8 @@ import static com.example.tolkys.myapplication.My_MainActivity.*;
 public class My_Broadcast extends BroadcastReceiver {
 
     private static final String TAG = "my_Broadcast";
-    private static final int JOB_ID = 11122;
-    private JobScheduler scheduler;
-    private JobInfo jobInfo;
 
-    private static long alarmTimer = 1000;
+    private static long alarmTimer = 10*60*1000;
 
     private Handler handler = new Handler();
     private static int notificationId = 0;
@@ -85,6 +82,8 @@ public class My_Broadcast extends BroadcastReceiver {
     private boolean isJustStarted = true;
     private boolean isCanceled = false;
 
+    private int counter = 0;
+
     NotificationManager nmgr;
     Notification mNotification;
     public static final String NOTIFICATION_CHANNEL_ID = "101243";
@@ -98,36 +97,27 @@ public class My_Broadcast extends BroadcastReceiver {
         final PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0,
                 intent, PendingIntent.FLAG_CANCEL_CURRENT);
         assert am != null;
-        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 1000, pendingIntent);
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                isJustStarted = false;
-                Log.d(TAG, "Triggered");
-            }
-        },1500);
         stopBleAdvertiser();
         setupBleAdvertiser();
         startBleAdvertiser(context);
+        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer - 1000, pendingIntent);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                boolean isAlive = true;
-                while (isAlive) {
-                    long inTime = System.currentTimeMillis();
-                    while (System.currentTimeMillis() - inTime < alarmTimer) {
+                long inTime = System.currentTimeMillis();
+                while (System.currentTimeMillis() - inTime < alarmTimer) {
+                    long upTime = System.currentTimeMillis();
+                    while(System.currentTimeMillis() - upTime < 1000){
+                        if (!loadState() | isCanceled) {
+                            am.cancel(pendingIntent);
+                            stopBleAdvertiser();
+                            Log.d(TAG, "Terminated");
+                            return;
+                        }
                     }
-                    if (!loadState() | isCanceled) {
-                        am.cancel(pendingIntent);
-                        stopBleAdvertiser();
-                        Log.d(TAG, "Terminated, auto "+isCanceled);
-                        return;
-                    }
-                    assert am != null;
-                    am.cancel(pendingIntent);
-                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + alarmTimer + 1500, pendingIntent);
-                    // Log.d(TAG, "Clear WDT");
                 }
+                stopBleAdvertiser();
+                Log.d(TAG, "Finished");
             }
         }).start();
     }
@@ -215,12 +205,28 @@ public class My_Broadcast extends BroadcastReceiver {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
             Log.i(TAG, "LE Advertise Started.");
+            counter = 0;
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    isJustStarted = false;
+                    Log.d(TAG, "Triggered");
+                }
+            },1000);
         }
 
         @Override
         public void onStartFailure(int errorCode) {
             Log.w(TAG, "LE Advertise Failed: " + errorCode);
-            isCanceled = true;
+            if (counter < 10) {
+                mBluetoothLeAdvertiser.stopAdvertising(mAdvertiseCallback);
+                threadSleep(1000);
+                mBluetoothLeAdvertiser.startAdvertising(advertiseSettings, advertiseData, mAdvertiseCallback);
+                counter++;
+                Log.d(TAG, "Restart "+counter);
+            } else {
+                isCanceled = true;
+            }
         }
     };
 
